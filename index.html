@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>GPU Stress Web</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: black;
+      color: white;
+      font-family: sans-serif;
+    }
+    #controls {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 10;
+      background: rgba(0,0,0,0.7);
+      padding: 10px;
+      border-radius: 8px;
+      max-width: 300px;
+    }
+    input, button {
+      margin-top: 5px;
+      padding: 5px;
+      width: 100%;
+    }
+    .shape {
+      position: absolute;
+      width: 60px;
+      height: 60px;
+      opacity: 0.9;
+    }
+    #info {
+      margin-top: 10px;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div id="controls">
+    <label>Số lượng mỗi giây: <input type="number" id="rate" value="3"></label>
+    <label>Vận tốc (px/s): <input type="number" id="speed" value="50"></label>
+    <button id="toggle">Bắt đầu</button>
+    <small>Lưu ý: Có thể gây lag máy.</small>
+    <div id="info"></div>
+  </div>
+
+  <script>
+    let intervalId = null;
+    let shapes = [];
+    let totalShapes = 0;
+    let startTime = null;
+
+    function createShape(speed) {
+      const shape = document.createElement("div");
+      shape.className = "shape";
+
+      shape.style.left = Math.random() * window.innerWidth + "px";
+      shape.style.top = Math.random() * window.innerHeight + "px";
+      shape.style.background = "transparent";
+      shape.style.border = "2px solid hsl(" + Math.random() * 360 + ", 100%, 50%)";
+      shape.style.transform = `rotate(${Math.random() * 360}deg)`;
+
+      const sides = Math.floor(Math.random() * 5) + 3;
+      const points = [];
+      const radius = 30;
+      for (let i = 0; i < sides; i++) {
+        const angle = (i / sides) * Math.PI * 2;
+        points.push(`${30 + radius * Math.cos(angle)} ${30 + radius * Math.sin(angle)}`);
+      }
+      shape.style.clipPath = `polygon(${points.join(",")})`;
+
+      const dx = (Math.random() - 0.5) * speed;
+      const dy = (Math.random() - 0.5) * speed;
+
+      document.body.appendChild(shape);
+      shapes.push({ el: shape, dx, dy });
+      totalShapes++;
+      updateInfo();
+    }
+
+    function animate() {
+      shapes.forEach(s => {
+        const rect = s.el.getBoundingClientRect();
+        let x = rect.left + s.dx * 0.016;
+        let y = rect.top + s.dy * 0.016;
+
+        if (x < 0 || x > window.innerWidth) s.dx *= -1;
+        if (y < 0 || y > window.innerHeight) s.dy *= -1;
+
+        s.el.style.left = (x < 0 ? 0 : x) + "px";
+        s.el.style.top = (y < 0 ? 0 : y) + "px";
+      });
+      requestAnimationFrame(animate);
+    }
+
+    function updateInfo(stopped = false) {
+      const rate = document.getElementById("rate").value;
+      const speed = document.getElementById("speed").value;
+      let info = `Tổng hình đã tạo: ${totalShapes}`;
+      if (stopped && startTime) {
+        const seconds = Math.floor((Date.now() - startTime) / 1000);
+        info += `<br>Thời gian chạy: ${seconds} giây`;
+        info += `<br>Số lượng/giây: ${rate}`;
+        info += `<br>Vận tốc: ${speed}px/s`;
+      }
+      document.getElementById("info").innerHTML = info;
+    }
+
+    document.getElementById("toggle").onclick = () => {
+      const rate = parseInt(document.getElementById("rate").value);
+      const speed = parseInt(document.getElementById("speed").value);
+      const btn = document.getElementById("toggle");
+
+      if (intervalId) {
+        const confirmClear = confirm("Bạn có chắc muốn dừng và xoá toàn bộ hình?");
+        if (confirmClear) {
+          clearInterval(intervalId);
+          intervalId = null;
+          btn.textContent = "Bắt đầu";
+          shapes.forEach(s => s.el.remove());
+          shapes = [];
+          updateInfo(true);
+        }
+      } else {
+        totalShapes = 0;
+        startTime = Date.now();
+        intervalId = setInterval(() => {
+          for (let i = 0; i < rate; i++) {
+            createShape(speed);
+          }
+        }, 1000);
+        btn.textContent = "Dừng";
+        requestAnimationFrame(animate);
+        updateInfo();
+      }
+    };
+  </script>
+</body>
+</html>

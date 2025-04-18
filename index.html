@@ -1,190 +1,247 @@
 <!DOCTYPE html>
 <html lang="vi">
 <head>
-  <meta charset="UTF-8">
-  <title>GPU Stress Web</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Khối Hỗn Loạn Đa Giác</title>
   <style>
     body {
       margin: 0;
       overflow: hidden;
-      background: black;
-      color: white;
-      font-family: sans-serif;
+      font-family: Arial, sans-serif;
+      background-color: black;
     }
-
-    #controls {
-      position: absolute;
-      top: 10px;
+    #container {
+      width: 100vw;
+      height: 100vh;
+      position: relative;
+      overflow: hidden;
+    }
+    .control-panel {
+      position: fixed;
+      bottom: 10px;
       left: 10px;
-      z-index: 10;
-      background: rgba(0,0,0,0.7);
+      background-color: rgba(255, 255, 255, 0.8);
       padding: 10px;
-      border-radius: 8px;
-      max-width: 300px;
+      border-radius: 5px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+      z-index: 1000;
     }
-
-    input, button {
-      margin-top: 5px;
-      padding: 5px;
-      width: 100%;
+    .control-row {
+      margin: 5px 0;
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
     }
-
-    .shape {
+    button {
+      padding: 5px 10px;
+      margin: 0 5px;
+      cursor: pointer;
+    }
+    .polygon {
       position: absolute;
-      width: 30px;
-      height: 30px;
-      opacity: 0.9;
-      border: 2px solid hsl(0, 100%, 50%);
-      animation: pulse 2s infinite ease-in-out;
+      will-change: transform, background-color;
     }
-
-    @keyframes pulse {
-      0%, 100% {
-        transform: scale(1);
-      }
-      50% {
-        transform: scale(1.5);
-      }
-    }
-
-    #info {
-      margin-top: 10px;
+    .stats {
       font-size: 14px;
+      margin-top: 5px;
     }
   </style>
 </head>
 <body>
-  <div id="controls">
-    <label>Số lượng mỗi giây: <input type="number" id="rate" value="3"></label>
-    <label>Vận tốc (px/s): <input type="number" id="speed" value="50"></label>
-    <button id="toggle">Bắt đầu</button>
-    <small>Lưu ý: Có thể gây lag máy.</small>
-    <div id="info"></div>
+  <div id="container"></div>
+  <div class="control-panel">
+    <div class="control-row">
+      <label>Số lượng/giây:</label>
+      <input type="number" id="spawnRate" value="5" min="1" max="100">
+    </div>
+    <div class="control-row">
+      <label>Vận tốc:</label>
+      <input type="number" id="speed" value="5" min="1" max="20">
+    </div>
+    <div class="control-row">
+      <label>Số cạnh tối đa:</label>
+      <input type="number" id="maxSides" value="10" min="3" max="20">
+    </div>
+    <div class="control-row">
+      <button id="startStopBtn">Bắt đầu</button>
+      <button id="resetBtn">Reset</button>
+    </div>
+    <div class="control-row stats">
+      Thời gian: <span id="timeDisplay">0.00</span>s
+    </div>
+    <div class="control-row stats">
+      Số khối: <span id="blockCount">0</span>
+    </div>
+    <div class="control-row stats">
+      <strong>Lịch sử:</strong>
+      <ul id="historyLog" style="font-size: 13px; margin-top: 5px; padding-left: 20px;"></ul>
+    </div>
   </div>
 
   <script>
-    let intervalId = null;
-    let shapes = [];
-    let totalShapes = 0;
-    let startTime = null;
-    let isConverging = false; // Biến xác định xem các khối có đang tập trung không
-    let convergenceTime = 3000; // Thời gian tập trung trước khi bung ra (3 giây)
-    let centerX = window.innerWidth / 2; // Tọa độ trung tâm
-    let centerY = window.innerHeight / 2; // Tọa độ trung tâm
+    const container = document.getElementById('container');
+    const startStopBtn = document.getElementById('startStopBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const spawnRateInput = document.getElementById('spawnRate');
+    const speedInput = document.getElementById('speed');
+    const maxSidesInput = document.getElementById('maxSides');
+    const timeDisplay = document.getElementById('timeDisplay');
+    const blockCountDisplay = document.getElementById('blockCount');
+    const historyLog = document.getElementById('historyLog');
 
-    // Tạo một hình khối mới
-    function createShape(speed) {
-      const shape = document.createElement("div");
-      shape.className = "shape";
+    let blocks = [];
+    let isRunning = false;
+    let startTime = 0;
+    let timerInterval;
+    let spawnInterval;
+    let blockCount = 0;
 
-      // Vị trí ngẫu nhiên của khối
-      shape.style.left = Math.random() * window.innerWidth + "px";
-      shape.style.top = Math.random() * window.innerHeight + "px";
+    function createPolygon() {
+      const polygon = document.createElement('div');
+      polygon.className = 'polygon';
 
-      // Màu sắc ngẫu nhiên cho viền
-      const hue = Math.random() * 360;
-      shape.style.borderColor = `hsl(${hue}, 100%, 50%)`;
-
-      // Tạo đa giác ngẫu nhiên
-      const sides = Math.floor(Math.random() * 5) + 3;
+      const size = Math.random() * 60 + 20;
+      const sides = Math.floor(Math.random() * (maxSidesInput.value - 2)) + 3;
+      const center = size / 2;
+      const radius = size / 2;
       const points = [];
-      const radius = 15; // Bán kính nhỏ hơn
+
       for (let i = 0; i < sides; i++) {
-        const angle = (i / sides) * Math.PI * 2;
-        points.push(`${30 + radius * Math.cos(angle)} ${30 + radius * Math.sin(angle)}`);
+        const angle = (i * 2 * Math.PI / sides) + (Math.random() * 0.5 - 0.25);
+        const distance = radius * (0.7 + Math.random() * 0.3);
+        const x = center + distance * Math.cos(angle);
+        const y = center + distance * Math.sin(angle);
+        points.push(`${x}px ${y}px`);
       }
-      shape.style.clipPath = `polygon(${points.join(",")})`;
 
-      // Vận tốc di chuyển ngẫu nhiên
-      const dx = (Math.random() - 0.5) * speed;
-      const dy = (Math.random() - 0.5) * speed;
+      const clipPath = `polygon(${points.join(',')})`;
+      const hue = Math.random() * 360;
+      const color = `hsl(${hue}, 70%, 60%)`;
 
-      // Thêm hình khối vào body
-      document.body.appendChild(shape);
-      shapes.push({ el: shape, dx, dy });
-      totalShapes++;
-      updateInfo();
-    }
-
-    // Hoạt hình di chuyển của các hình khối
-    function animate() {
-      shapes.forEach(s => {
-        const rect = s.el.getBoundingClientRect();
-        let x = rect.left + s.dx * 0.016;
-        let y = rect.top + s.dy * 0.016;
-
-        // Nếu đang trong trạng thái tập trung, di chuyển về trung tâm
-        if (isConverging) {
-          const angleToCenter = Math.atan2(centerY - y, centerX - x);
-          s.dx = Math.cos(angleToCenter) * 2; // Tốc độ di chuyển về trung tâm
-          s.dy = Math.sin(angleToCenter) * 2;
-        }
-
-        // Nếu không còn tập trung, các khối sẽ bắn ngẫu nhiên
-        if (!isConverging && (x < 0 || x > window.innerWidth || y < 0 || y > window.innerHeight)) {
-          s.dx = (Math.random() - 0.5) * 50;
-          s.dy = (Math.random() - 0.5) * 50;
-        }
-
-        s.el.style.left = (x < 0 ? 0 : x) + "px";
-        s.el.style.top = (y < 0 ? 0 : y) + "px";
-      });
-      requestAnimationFrame(animate);
-    }
-
-    // Cập nhật thông tin hiển thị
-    function updateInfo(stopped = false) {
-      const rate = document.getElementById("rate").value;
-      const speed = document.getElementById("speed").value;
-      let info = `Tổng hình đã tạo: ${totalShapes}`;
-      if (stopped && startTime) {
-        const seconds = Math.floor((Date.now() - startTime) / 1000);
-        info += `<br>Thời gian chạy: ${seconds} giây`;
-        info += `<br>Số lượng/giây: ${rate}`;
-        info += `<br>Vận tốc: ${speed}px/s`;
-      }
-      document.getElementById("info").innerHTML = info;
-    }
-
-    // Bắt đầu/dừng tạo hình khối
-    document.getElementById("toggle").onclick = () => {
-      const rate = parseInt(document.getElementById("rate").value);
-      const speed = parseInt(document.getElementById("speed").value);
-      const btn = document.getElementById("toggle");
-
-      if (intervalId) {
-        const confirmClear = confirm("Bạn có chắc muốn dừng và xoá toàn bộ hình?");
-        if (confirmClear) {
-          clearInterval(intervalId);
-          intervalId = null;
-          btn.textContent = "Bắt đầu";
-          shapes.forEach(s => s.el.remove());
-          shapes = [];
-          updateInfo(true);
-        }
+      const edge = Math.floor(Math.random() * 3);
+      let left, top;
+      if (edge === 0) {
+        left = Math.random() * container.clientWidth;
+        top = -size;
+      } else if (edge === 1) {
+        left = container.clientWidth;
+        top = Math.random() * container.clientHeight;
       } else {
-        totalShapes = 0;
-        startTime = Date.now();
-        intervalId = setInterval(() => {
-          for (let i = 0; i < rate; i++) {
-            createShape(speed);
-          }
-        }, 1000);
-        btn.textContent = "Dừng";
-        requestAnimationFrame(animate);
-        updateInfo();
+        left = Math.random() * container.clientWidth;
+        top = container.clientHeight;
       }
-    };
 
-    // Xử lý sự kiện click vào màn hình
-    document.body.addEventListener("click", () => {
-      if (!isConverging) {
-        isConverging = true;
-        setTimeout(() => {
-          isConverging = false; // Sau thời gian chậm, các khối sẽ bung ra
-        }, convergenceTime);
+      polygon.style.width = `${size}px`;
+      polygon.style.height = `${size}px`;
+      polygon.style.backgroundColor = color;
+      polygon.style.left = `${left}px`;
+      polygon.style.top = `${top}px`;
+      polygon.style.clipPath = clipPath;
+      polygon.style.webkitClipPath = clipPath;
+
+      container.appendChild(polygon);
+
+      const blockInfo = {
+        element: polygon,
+        size: size,
+        x: left,
+        y: top,
+        dx: (Math.random() * 2 - 1) * speedInput.value,
+        dy: (Math.random() * 2 - 1) * speedInput.value,
+        scale: 1,
+        scaleDirection: Math.random() > 0.5 ? 1 : -1,
+        hue: hue,
+        colorChangeSpeed: 1,
+        rotation: 0,
+        rotationSpeed: (Math.random() * 2 - 1) * 2
+      };
+
+      blocks.push(blockInfo);
+      blockCount++;
+      blockCountDisplay.textContent = blockCount;
+    }
+
+    function updateBlocks() {
+      const speed = parseFloat(speedInput.value);
+      blocks.forEach(block => {
+        block.x += block.dx;
+        block.y += block.dy;
+
+        if (block.x < -block.size || block.x > container.clientWidth) {
+          block.dx = -block.dx * (0.9 + Math.random() * 0.2);
+        }
+        if (block.y < -block.size || block.y > container.clientHeight) {
+          block.dy = -block.dy * (0.9 + Math.random() * 0.2);
+        }
+
+        block.scale += 0.01 * block.scaleDirection;
+        if (block.scale > 1.5 || block.scale < 0.5) {
+          block.scaleDirection *= -1;
+        }
+
+        block.rotation += block.rotationSpeed;
+        block.hue = (block.hue + block.colorChangeSpeed) % 360;
+        const color = `hsl(${block.hue}, 70%, 60%)`;
+
+        block.element.style.left = `${block.x}px`;
+        block.element.style.top = `${block.y}px`;
+        block.element.style.transform = `scale(${block.scale}) rotate(${block.rotation}deg)`;
+        block.element.style.backgroundColor = color;
+      });
+
+      if (isRunning) requestAnimationFrame(updateBlocks);
+    }
+
+    function start() {
+      if (isRunning) return;
+      isRunning = true;
+      startStopBtn.textContent = 'Dừng';
+      startTime = Date.now();
+
+      timerInterval = setInterval(() => {
+        const elapsed = (Date.now() - startTime) / 1000;
+        timeDisplay.textContent = elapsed.toFixed(2);
+      }, 10);
+
+      spawnInterval = setInterval(() => {
+        createPolygon();
+      }, 1000 / parseFloat(spawnRateInput.value));
+
+      updateBlocks();
+    }
+
+    function stop() {
+      if (!isRunning) return;
+      isRunning = false;
+      startStopBtn.textContent = 'Bắt đầu';
+      clearInterval(timerInterval);
+      clearInterval(spawnInterval);
+
+      const elapsed = (Date.now() - startTime) / 1000;
+      const li = document.createElement('li');
+      li.textContent = `Khối: ${blockCount}, Thời gian: ${elapsed.toFixed(2)}s`;
+      historyLog.appendChild(li);
+
+      if (confirm('Bạn có muốn xóa tất cả các khối không?')) {
+        blocks.forEach(block => container.removeChild(block.element));
+        blocks = [];
+        blockCount = 0;
+        blockCountDisplay.textContent = '0';
       }
+    }
+
+    function reset() {
+      stop();
+      historyLog.innerHTML = '';
+      timeDisplay.textContent = '0.00';
+    }
+
+    startStopBtn.addEventListener('click', () => {
+      isRunning ? stop() : start();
     });
+
+    resetBtn.addEventListener('click', reset);
   </script>
 </body>
 </html>

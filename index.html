@@ -6,32 +6,50 @@
   <style>
     body {
       margin: 0;
-      overflow: hidden;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
       background: black;
       color: white;
       font-family: sans-serif;
     }
+
+    #container {
+      position: relative;
+      width: 1500px;
+      height: 1000px;
+      border: 2px solid white;
+      background: #111;
+      overflow: hidden;
+    }
+
     #controls {
       position: absolute;
       top: 10px;
       left: 10px;
       z-index: 10;
       background: rgba(0,0,0,0.7);
-      padding: 10px;
-      border-radius: 8px;
+      padding: 12px;
+      border-radius: 10px;
       max-width: 300px;
     }
+
     input, button {
       margin-top: 5px;
-      padding: 5px;
+      padding: 10px;
+      font-size: 16px;
       width: 100%;
+      box-sizing: border-box;
     }
+
     .shape {
       position: absolute;
       width: 60px;
       height: 60px;
       opacity: 0.9;
     }
+
     #info {
       margin-top: 10px;
       font-size: 14px;
@@ -39,12 +57,14 @@
   </style>
 </head>
 <body>
-  <div id="controls">
-    <label>Số lượng mỗi giây: <input type="number" id="rate" value="3"></label>
-    <label>Vận tốc (px/s): <input type="number" id="speed" value="50"></label>
-    <button id="toggle">Bắt đầu</button>
-    <small>Lưu ý: Có thể gây lag máy.</small>
-    <div id="info"></div>
+  <div id="container">
+    <div id="controls">
+      <label>Số lượng mỗi giây: <input type="number" id="rate" value="3"></label>
+      <label>Vận tốc (px/s): <input type="number" id="speed" value="50"></label>
+      <button id="toggle">Bắt đầu</button>
+      <small>Lưu ý: Có thể gây lag máy.</small>
+      <div id="info"></div>
+    </div>
   </div>
 
   <script>
@@ -52,13 +72,17 @@
     let shapes = [];
     let totalShapes = 0;
     let startTime = null;
+    const container = document.getElementById("container");
 
     function createShape(speed) {
       const shape = document.createElement("div");
       shape.className = "shape";
 
-      shape.style.left = Math.random() * window.innerWidth + "px";
-      shape.style.top = Math.random() * window.innerHeight + "px";
+      let x = Math.random() * (container.clientWidth - 60);
+      let y = Math.random() * (container.clientHeight - 60);
+
+      shape.style.left = x + "px";
+      shape.style.top = y + "px";
       shape.style.background = "transparent";
       shape.style.border = "2px solid hsl(" + Math.random() * 360 + ", 100%, 50%)";
       shape.style.transform = `rotate(${Math.random() * 360}deg)`;
@@ -75,23 +99,22 @@
       const dx = (Math.random() - 0.5) * speed;
       const dy = (Math.random() - 0.5) * speed;
 
-      document.body.appendChild(shape);
-      shapes.push({ el: shape, dx, dy });
+      container.appendChild(shape);
+      shapes.push({ el: shape, dx, dy, x, y });
       totalShapes++;
       updateInfo();
     }
 
     function animate() {
       shapes.forEach(s => {
-        const rect = s.el.getBoundingClientRect();
-        let x = rect.left + s.dx * 0.016;
-        let y = rect.top + s.dy * 0.016;
+        s.x += s.dx * 0.016;
+        s.y += s.dy * 0.016;
 
-        if (x < 0 || x > window.innerWidth) s.dx *= -1;
-        if (y < 0 || y > window.innerHeight) s.dy *= -1;
+        if (s.x < 0 || s.x > container.clientWidth - 60) s.dx *= -1;
+        if (s.y < 0 || s.y > container.clientHeight - 60) s.dy *= -1;
 
-        s.el.style.left = (x < 0 ? 0 : x) + "px";
-        s.el.style.top = (y < 0 ? 0 : y) + "px";
+        s.el.style.left = s.x + "px";
+        s.el.style.top = s.y + "px";
       });
       requestAnimationFrame(animate);
     }
